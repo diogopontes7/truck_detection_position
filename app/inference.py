@@ -9,10 +9,20 @@ import cv2
 from PIL import Image, ImageDraw, ImageFont
 import matplotlib.pyplot as plt
 from io import BytesIO
+from dotenv import load_dotenv
+
+load_dotenv()  # Carrega as variáveis de ambiente do arquivo .env
 
 # Meter clientInference no início do código, criar uma instância do cliente
 
+api_key = os.getenv("ROBOFLOW_API_KEY")
 
+
+
+client = InferenceHTTPClient(
+    api_url="https://serverless.roboflow.com",
+    api_key= api_key
+)
 # Passa para bytes, deve ser melhor que passar o caminho do arquivo
 # with open("C:/Users/Diogo/OneDrive - Universidade do Minho/Uni/Summer_Intern_Project/app/labeled_images_diogo/train/images/0001062_jpg.rf.88c8a78010ef47014cf5078d6b55ac16.jpg", "rb") as f:
 #     image_bytes = f.read()
