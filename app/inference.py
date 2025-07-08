@@ -11,34 +11,29 @@ import matplotlib.pyplot as plt
 from io import BytesIO
 from dotenv import load_dotenv
 
-load_dotenv()  # Carrega as variáveis de ambiente do arquivo .env
-
-# Meter clientInference no início do código, criar uma instância do cliente
-
-api_key = os.getenv("ROBOFLOW_API_KEY")
-
-max_right_x = 0  # Inicializa o valor máximo para o canto visível
-min_left_x = float('inf')
-min_right_x = float('inf')  # Inicializa o valor mínimo para o canto visível (closest right point)
+load_dotenv() 
+ROBOFLOW_API_KEY = os.getenv("api_key")
 
 client = InferenceHTTPClient(
     api_url="https://serverless.roboflow.com",
-    api_key= api_key
+    api_key=ROBOFLOW_API_KEY
 )
-# Passa para bytes, deve ser melhor que passar o caminho do arquivo
-# with open("C:/Users/Diogo/OneDrive - Universidade do Minho/Uni/Summer_Intern_Project/app/labeled_images_diogo/train/images/0001062_jpg.rf.88c8a78010ef47014cf5078d6b55ac16.jpg", "rb") as f:
-#     image_bytes = f.read()
+
+img_path = os.path.join("examples", "0013247.jpg")
+with open(img_path, "rb") as f:
+     image_bytes = f.read()
+
 
 result = client.run_workflow(
     workspace_name="summer-n8dui",
     workflow_id="detect-count-and-visualize-7",
     images={
-        "image": "C:/Users/Diogo/OneDrive - Universidade do Minho/Uni/Summer_Intern_Project/app/labeled_images_diogo/train/images/0001062_jpg.rf.88c8a78010ef47014cf5078d6b55ac16.jpg" 
+        "image": img_path
     },
-    use_cache=True # cache workflow definition for 15 minutes
+    use_cache=True 
 )
-image_path = "C:/Users/Diogo/OneDrive - Universidade do Minho/Uni/Summer_Intern_Project/app/labeled_images_diogo/train/images/0001062_jpg.rf.88c8a78010ef47014cf5078d6b55ac16.jpg"
-image = Image.open(image_path)
+#image_path = "C:/Users/Diogo/OneDrive - Universidade do Minho/Uni/Summer_Intern_Project/app/labeled_images_diogo/train/images/0001062_jpg.rf.88c8a78010ef47014cf5078d6b55ac16.jpg"
+image = Image.open(img_path)
 draw = ImageDraw.Draw(image)
 
 #print(result)  # Print the result dictionary
@@ -46,12 +41,27 @@ print(type(result))
 
 # https://docs.roboflow.com/deploy/serverless/object-detection
 
+# pontos Maia
+pontos_maia = [
+    (1730, 569),
+    (351, 951),
+    (1722, 1080),
+    #(1719, 1078),
+    #(1740, 1050)
+    #(2055,630)
+    #(3101,698)
+    (2075.62, 601.69)
+]
+
+
+draw.polygon(pontos_maia, outline="blue", width=3)
+
 try:
     detections = result[0]['predictions']['predictions']  # Vai buscar as previsões do resultado
     print(detections)  #verificar se vai buscar o certo
     font = ImageFont.truetype("arial.ttf", 40)
     
-    for bounding_box in detections:
+    for bounding_box in detections:                                                                                         
         
         x = bounding_box['x']
         y = bounding_box['y']
@@ -103,8 +113,16 @@ try:
         
             draw.line((line_start_x, line_y, line_end_x, line_y), fill="green", width=2)
 
+
+        ## Serve para desenhar um círculo vermelho no centro do bounding box
+        raio = 5
+        bbox = (x - raio, y - raio, x + raio, y + raio)
+        draw.ellipse(bbox, fill="red")
+
+
 except (IndexError, KeyError) as e:
     print(f"Erro ao acessar as previsões {e}")
+draw.polygon(pontos_maia, outline="blue", width=6)   
 # Display the image
 image.show()
 
