@@ -10,12 +10,16 @@ import matplotlib.pyplot as plt
 from io import BytesIO
 from dotenv import load_dotenv
 
+max_right_x = 0  # Inicializa o max_right_x como 0
+min_left_x = float("inf")  # Inicializa o min_left_x como infinito
+
 load_dotenv()
 
-ROBOFLOW_API_KEY = os.getenv("api_key")
+ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY")
 
 client = InferenceHTTPClient(
-    api_url="https://serverless.roboflow.com", api_key=ROBOFLOW_API_KEY
+    api_url="https://serverless.roboflow.com", 
+    api_key=ROBOFLOW_API_KEY
 )
 
 img_path = os.path.join("examples", "0013247.jpg")
@@ -37,17 +41,24 @@ draw = ImageDraw.Draw(image)
 print(type(result))
 
 # https://docs.roboflow.com/deploy/serverless/object-detection
+x1 = 351        # ponto esquerdo (bottom-left of polygon)
+x2 = 2075.62    # ponto direito (top-right of polygon)
+y1 = 569        # ponto base esquerdo (top-left of polygon)
+y2 = 1080       # ponto base direito (bottom-right of polygon)
+
 
 # pontos Maia
 pontos_maia = [
-    (1730, 569),
-    (351, 951),
-    (1722, 1080),
+    #(1730, 569),
+    (1430, 569), # ponto esquerdo
+    (351, 951), # ponto direito
+    #(531, 951),
+    (1722, 1080), # ponto base esquerdo
     # (1719, 1078),
     # (1740, 1050)
     # (2055,630)
     # (3101,698)
-    (2075.62, 601.69),
+    (2075.62, 601.69), # ponto base direito
 ]
 
 
@@ -115,6 +126,7 @@ try:
 
             draw.line((line_start_x, line_y, line_end_x, line_y), fill="green", width=2)
 
+        # PEnsar em usar isto como a referencia da label ou seja, a linha chega só até a esse ponto central em cada label
         ## Serve para desenhar um círculo vermelho no centro do bounding box
         raio = 5
         bbox = (x - raio, y - raio, x + raio, y + raio)
