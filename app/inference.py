@@ -11,6 +11,7 @@ from io import BytesIO
 from dotenv import load_dotenv
 
 load_dotenv()
+
 ROBOFLOW_API_KEY = os.getenv("api_key")
 
 client = InferenceHTTPClient(
