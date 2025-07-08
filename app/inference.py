@@ -9,13 +9,18 @@ from PIL import Image, ImageDraw, ImageFont
 import matplotlib.pyplot as plt
 from io import BytesIO
 from dotenv import load_dotenv
+import numpy as np
+
+max_right_x = 0  # Inicializa o max_right_x como 0
+min_left_x = float("inf")  # Inicializa o min_left_x como infinito
 
 load_dotenv()
 
-ROBOFLOW_API_KEY = os.getenv("api_key")
+ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY")
 
 client = InferenceHTTPClient(
-    api_url="https://serverless.roboflow.com", api_key=ROBOFLOW_API_KEY
+    api_url="https://serverless.roboflow.com", 
+    api_key=ROBOFLOW_API_KEY
 )
 
 img_path = os.path.join("examples", "0013247.jpg")
@@ -38,20 +43,42 @@ print(type(result))
 
 # https://docs.roboflow.com/deploy/serverless/object-detection
 
+x1_maia = 351        # ponto esquerdo (bottom-left of polygon)
+x2_maia = 2075.62    # ponto direito (top-right of polygon)
+y1_maia = 569        # ponto base esquerdo (top-left of polygon)
+y2_maia = 1080       # ponto base direito (bottom-right of polygon)
+
+
 # pontos Maia
 pontos_maia = [
-    (1730, 569),
-    (351, 951),
-    (1722, 1080),
+    #(1730, 569),
+    (1430, 569), # ponto em cima esquerdo
+    (351, 951), # ponto em baixo esquerdo
+    #(531, 951),
+    (1722, 1080), # ponto em baixo direito
     # (1719, 1078),
     # (1740, 1050)
     # (2055,630)
     # (3101,698)
-    (2075.62, 601.69),
+    (2075.62, 601.69), # ponto em cima direito, o que nao da pra ver
+]
+
+pontos_maia_teste = [
+    #(1730, 569),
+    (1430, y1_maia), # ponto esquerdo
+    (x1_maia, 951), # ponto direito
+    #(531, 951),
+    (1722, y2_maia), # ponto base esquerdo
+    # (1719, 1078),
+    # (1740, 1050)
+    # (2055,630)
+    # (3101,698)
+    (x2_maia, 601.69), # ponto base direito
 ]
 
 
-draw.polygon(pontos_maia, outline="blue", width=3)
+#draw.polygon(pontos_maia, outline="blue", width=3)
+#draw.polygon(pontos_maia_teste, outline="blue", width=3)
 
 try:
     detections = result[0]["predictions"][
@@ -73,6 +100,9 @@ try:
         x2 = x + width / 2  # direita
         y1 = y - height / 2  # topo
         y2 = y + height / 2  # base
+# Nao posso fazer isto para todas as classes que nao fazia sentido
+        # if x1 > x1_maia:
+        #     print(f"Bounding box {class_name} está fora do limite esquerdo ({x1_maia})")
 
         # Draw rectangle
         draw.rectangle((x1, y1, x2, y2), outline="red", width=2)
@@ -83,6 +113,7 @@ try:
                 "x2": x2,
                 "y2": y2,
             }  # define a linha de baixo da label do front, o x1 é o ponto esquerdo e o x2 é o ponto direito, y2 é a base da label do front
+            print(f"x1: {x1}, x2: {x2}, y2: {y2}")
 
         # Find the furthermost right point of visible_corner
         if class_name == "visible_corner":
@@ -115,6 +146,7 @@ try:
 
             draw.line((line_start_x, line_y, line_end_x, line_y), fill="green", width=2)
 
+        # PEnsar em usar isto como a referencia da label ou seja, a linha chega só até a esse ponto central em cada label
         ## Serve para desenhar um círculo vermelho no centro do bounding box
         raio = 5
         bbox = (x - raio, y - raio, x + raio, y + raio)
@@ -125,4 +157,24 @@ except (IndexError, KeyError) as e:
     print(f"Erro ao acessar as previsões {e}")
 draw.polygon(pontos_maia, outline="blue", width=6)
 # Display the image
-image.show()
+#image.show()
+
+def on_hover(event):
+    if event.inaxes:
+        x, y = int(event.xdata), int(event.ydata)
+        plt.title(f'Coordinates: ({x}, {y})')
+        plt.draw()
+
+# Convert PIL image to numpy array for matplotlib
+img_array = np.array(image)
+
+# Create matplotlib figure and display image
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.imshow(img_array)
+ax.set_title('Hover over image to see coordinates')
+
+# Connect the hover event
+fig.canvas.mpl_connect('motion_notify_event', on_hover)
+
+# Show the plot
+plt.show()
