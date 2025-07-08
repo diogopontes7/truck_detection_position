@@ -19,7 +19,7 @@ client = InferenceHTTPClient(
     api_key=ROBOFLOW_API_KEY
 )
 
-img_path = os.path.join("examples", "0018146.jpg")
+img_path = os.path.join("examples", "0013247.jpg")
 with open(img_path, "rb") as f:
      image_bytes = f.read()
 
@@ -40,8 +40,20 @@ print(type(result))
 
 # https://docs.roboflow.com/deploy/serverless/object-detection
 
-center_point_radius = 8 # Raio do círculo para desenhar o centro
-center_point_color = "yellow" # Cor do ponto central
+# pontos Maia
+pontos_maia = [
+    (1730, 569),
+    (351, 951),
+    (1722, 1080),
+    #(1719, 1078),
+    #(1740, 1050)
+    #(2055,630)
+    #(3101,698)
+    (2075.62, 601.69)
+]
+
+
+draw.polygon(pontos_maia, outline="blue", width=3)
 
 try:
     detections = result[0]['predictions']['predictions']  # Vai buscar as previsões do resultado
@@ -74,17 +86,16 @@ try:
         label = f"{class_name}: {confidence:.2f}"
         draw.text((x1, y1 - 10), label, fill="red", font=font)
 
-        draw.ellipse(
-            (x - center_point_radius,
-             y - center_point_radius,
-             x + center_point_radius,
-             y + center_point_radius),
-            fill=center_point_color, # Preenche o círculo com a cor definida
-            outline=center_point_color # A linha do círculo também é da mesma cor
-        )
+
+        ## Serve para desenhar um círculo vermelho no centro do bounding box
+        raio = 5
+        bbox = (x - raio, y - raio, x + raio, y + raio)
+        draw.ellipse(bbox, fill="red")
+
 
 except (IndexError, KeyError) as e:
     print(f"Erro ao acessar as previsões {e}")
+draw.polygon(pontos_maia, outline="blue", width=6)   
 # Display the image
 image.show()
 
