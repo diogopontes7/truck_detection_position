@@ -16,13 +16,16 @@ import numpy as np
 max_right_x = 0  # Inicializa o max_right_x como 0
 min_left_x = float("inf")  # Inicializa o min_left_x como infinito
 
+# FUNÇÃO QUE CHAMA O MODELO DO ROBOFLOW
 
 def create_model(img_path):
     """
     Função para criar o modelo de inferência.
     """
+
     load_dotenv()
-    ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY")
+    ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY")      
+
     
     client = InferenceHTTPClient(
         api_url="https://serverless.roboflow.com", 
@@ -38,12 +41,21 @@ def create_model(img_path):
     
     return result
 
+## Escolher a imagem que queremos analisar 
+
 img_path = os.path.join("examples", "0013247.jpg")
 with open(img_path, "rb") as f:
     image_bytes = f.read()
 
 image = Image.open(img_path)
 draw = ImageDraw.Draw(image)
+
+#image_pil = Image.open(img_path)
+#image_np = np.array(image_pil)
+#normalized_image = image_np.astype(np.float32) / 255.0
+
+
+###########################################
 
 x1_maia = 351        # ponto esquerdo (bottom-left of polygon)
 x2_maia = 2075.62    # ponto direito (top-right of polygon)
@@ -65,40 +77,54 @@ pontos_maia_teste = [
     (x2_maia, 601.69), # ponto base direito
 ]
 
+###############################################
+
+# Função para criar estas listas | Detections -> Vem da Inference()
+def auxiliary_function(detections):
+    front = [l for l in detections if l["class"] == "front"]
+    visible_corner = [l for l in detections if l["class"] == "visible_corner"]
+    invisible_corner = [l for l in detections if l["class"] == "invisible_corner"]
+    side = [l for l in detections if l["class"] == "side"]
+     
+    return front, visible_corner, invisible_corner, side
+
 
 def inference():
 
     try:
         result = create_model(img_path)
-        detections = result[0]["predictions"]["predictions"]  # Vai buscar as previsões do resultado
-        print(detections)  # verificar se vai buscar o certo
-        #font = ImageFont.truetype("arial.ttf", 40)
-
+        detections = result[0]["predictions"]["predictions"]                                    # Detections é uma lista de dicionários, cada um representando uma detecção
+        print(detections)  
         
+        
+        #font = ImageFont.truetype("arial.ttf", 40)
         #front_detection = None  # Inicializa front_detection como None
 
         for bounding_box in detections:
 
-            x = bounding_box["x"] # CEntro x, tem que estar alinhado a este para verificar se está dentro do limite
-            y = bounding_box["y"] # Centro y
-            width = bounding_box["width"] # largura de cada caixa encontrada
-            height = bounding_box["height"]
-            class_name = bounding_box["class"] # isto é importante para perceber cada classe que encontramos
+            x = bounding_box["x"]                                                               # CEntro x, tem que estar alinhado a este para verificar se está dentro do limite
+            y = bounding_box["y"]                                                               # Centro y
+            width = bounding_box["width"]                                                       # largura de cada caixa encontrada
+            height = bounding_box["height"]                                                     # altura de cada caixa encontrada                              
+            class_name = bounding_box["class"]                                                  # isto é importante para perceber cada classe que encontramos
             confidence = bounding_box["confidence"]
 
             x1 = x - width / 2  # esquerda
             x2 = x + width / 2  # direita
             y1 = y - height / 2  # topo
             y2 = y + height / 2  # base
-    # Nao posso fazer isto para todas as classes que nao fazia sentido
+            
+            # Nao posso fazer isto para todas as classes que nao fazia sentido
             # if x1 > x1_maia:
             #     print(f"Bounding box {class_name} está fora do limite esquerdo ({x1_maia})")
             # Desenha a caixa da label com o seu nome e confiança
+            
             label = f"{class_name}: {confidence:.2f}"
             draw.text((x1, y1 - 10), label, fill="red", font=None)  
 
             # Draw rectangle
-            draw.rectangle((x1, y1, x2, y2), outline="red", width=2)          
+            draw.rectangle((x1, y1, x2, y2), outline="red", width=2)  
+
     except (IndexError, KeyError) as e:
         print(f"Erro ao acessar as previsões {e}")
     draw.polygon(pontos_maia, outline="blue", width=6)
@@ -107,12 +133,12 @@ def inference():
 # A lógica de inferencia é mais ou menos até aqui, dps disto é a definição do poligono e da linha que vai ser desenhada
 # Aqui o que se vai fazer basicamente é ver as labels todas da frente do camião, vamos ver as coorde
 
-def check_vertical_alignment_front():
-            detections = inference()  # Chama a função de inferência para obter as detecções
+def check_vertical_alignment_front(front, visible_corner, invisible_corner,detections):
             
-            front = [l for l in detections if l["class"] == "front"]
-            visible_corner = [l for l in detections if l["class"] == "visible_corner"]
-            invisible_corner = [l for l in detections if l["class"] == "invisible_corner"]
+            
+            #front = [l for l in detections if l["class"] == "front"]
+            #visible_corner = [l for l in detections if l["class"] == "visible_corner"]
+            #invisible_corner = [l for l in detections if l["class"] == "invisible_corner"]
             
             x_coords = [l["x"] for l in front + visible_corner + invisible_corner] #coordenadas x de cada label
             
@@ -123,73 +149,57 @@ def check_vertical_alignment_front():
             deviations = [np.abs(x-mean_x) for x in x_coords] # Para cada x., vamos ver o desvio absoluto da media menos o seu valor
             max_deviation = np.max(deviations)  # Maior desvio absoluto
             
-            tolerancia = 0.05 * detections["width"]  # Tolerância em pixels para considerar que as labels estão alinhadas
+            tolerancia = 0.05 * detections[0]['width']  # Tolerância em pixels para considerar que as labels estão alinhadas
             
             alinhado = max_deviation <= tolerancia
+            print(f"Alinhamento: {'Sim' if alinhado else 'Não'} (Máximo desvio: {max_deviation:.2f} pixels, Tolerância: {tolerancia:.2f} pixels)")
             
-            return alinhado,x_coords
+            return alinhado,x_coords, max_deviation
 
 
+def check_behind_side(front, visible_corner, invisible_corner, side, detections):
 
+        #detections = inference()                                                                
+        #front = [l for l in detections if l["class"] == "front"]
+        #visible_corner = [l for l in detections if l["class"] == "visible_corner"]
+        #invisible_corner = [l for l in detections if l["class"] == "invisible_corner"]
+        #side = [l for l in detections if l["class"] == "side"]
+
+        if not side:
+            return False, 0.0, {'error': 'No side labels found'}
+        
+        side_right_edges = [ l["x"] + l["width"] / 2  for l in side]                            # | Obter a Direita do SIDE
+        max_side_right = max(side_right_edges)
+        
+        front_components = front + visible_corner + invisible_corner
+        if not front_components:
+            return False, 0.0, {'error': 'No front components found'}
             
-            if class_name == "front":
-                front_detection = {
-                    "x1": x1,
-                    "x2": x2,
-                    "y2": y2,
-                }  # define a linha de baixo da label do front, o x1 é o ponto esquerdo e o x2 é o ponto direito, y2 é a base da label do front
-                print(f"x1: {x1}, x2: {x2}, y2: {y2}")
-                if x1 < x1_maia:
-                    print(f"Bounding box {class_name} está fora do limite esquerdo ({x1_maia})")
-                if x2 > x2_maia:
-                    print(f"Bounding box {class_name} está fora do limite direito ({x2_maia})")
-                if y2 > y2_maia:
-                    print(f"Bounding box {class_name} está fora do limite superior ({y2_maia})")
-
-            raio = 5 # raio do círculo vermelho que vamos desenhar no centro de cada caixa label
-            bbox = (x - raio, y - raio, x + raio, y + raio)
-            draw.ellipse(bbox, fill="red")
-            # Find the furthermost right point of visible_corner
-            if class_name == "visible_corner":
-                max_right_x = bbox[2]  # x2 é o ponto direito da caixa, que é o maior ponto direito de todas as caixas encontradas
-
-            # if class_name == "visible_corner":
-            #     min_right_x = min(min_right_x, x2)
-
-            # Find the furthermost left point of invisible_corner
-            if class_name == "invisible_corner":
-                min_left_x = bbox[0]  # x1 é o ponto esquerdo da caixa, que é o menor ponto esquerdo de todas as caixas encontradas
-
-            # Draw label with class name and confidence
-            label = f"{class_name}: {confidence:.2f}"
-            draw.text((x1, y1 - 10), label, fill="red", font=None)  # Use None for default font
-
-            if front_detection and (max_right_x > 0 or min_left_x < float("inf")):
-                line_y = front_detection["y2"] + 10 # 10 pixels abaixo da base da label do front
-
-                # Determina a linha, de acordo se encontra a label ou não
-                line_start_x = (
-                    min_left_x if min_left_x < float("inf") else front_detection["x1"]
-                )  # Se nao for inf, signoifoca que foi encontrado a label e existe um min_left do invisible_corner
-                line_end_x = (
-                    max_right_x if max_right_x > 0 else front_detection["x2"]
-                )  # Mesma logica para o visible_corner, se for maior que 0, significa que foi encontrado a label e existe um max_right do visible_corner
-                # line_end_x = min_right_x if min_right_x < float('inf') else front_detection['x2']
-
-                # se nao encontramos, usamos o ponto direito e esquerdo da label do front
+        front_left_edges = [l['x'] - l['width'] / 2 for l in front_components]                  # | Obter a Esquerda do FRONT
+        min_front_left = min(front_left_edges)
+        
+        distance = min_front_left - max_side_right                                              # DISTANCE -> Vai ser sempre um valor negativo, o min_front_left é sempre menor que o max_side_right
+        is_behind = distance >= 0.02                                                            # | Não entende este valor 0.02
+        print(f"is_behind: {is_behind}, distance: {distance:.2f} pixels")                                                                 
+        
+        return is_behind, distance
 
 
-            draw.line((line_start_x, line_y, line_end_x, line_y), fill="green", width=2)
-
-            # PEnsar em usar isto como a referencia da label ou seja, a linha chega só até a esse ponto central em cada label
-            ## Serve para desenhar um círculo vermelho no centro do bounding box
-            # raio = 5
-            # bbox = (x - raio, y - raio, x + raio, y + raio)
-            # draw.ellipse(bbox, fill="red")
-
-
-# Display the image
-#image.show()
+def check_truck_position(detections,is_vertically_aligned, is_behind_side):
+        """Comprehensive check of truck position with detailed analysis"""
+        required_classes = ['front', 'side']
+        present_classes = set(l["class"] for l in detections)
+        missing_classes = set(required_classes) - present_classes
+        
+        if missing_classes:
+            print(f"Missing required classes: {missing_classes}")
+        
+        #is_vertically_aligned, x_coords, max_dev = check_vertical_alignment_front(detections)
+        #is_behind_side, distance  = check_behind_side(detections)
+        is_valid = is_vertically_aligned and is_behind_side
+        
+        return is_valid
+    
 
 def on_hover(event):
     if event.inaxes:
@@ -212,18 +222,20 @@ fig.canvas.mpl_connect('motion_notify_event', on_hover)
 plt.show()
 
 def main():
-    """
-    Main function to test the inference and alignment checking functionality.
-    """
     print("Starting truck detection and alignment checking...")
     
     # Test the inference function
     print("\n1. Running inference...")
     detections = inference()
+    front, visible, invisible, side = auxiliary_function(detections)
     
     # Test the vertical alignment check
     print("\n2. Checking vertical alignment...")
-    alignment_detections = check_vertical_alignment_front()
+    is_vertically_aligned, x_coords, max_dev = check_vertical_alignment_front(front, visible, invisible, detections)
+
+    
+    print("\n3. Checking behind alignment...")
+    is_behind_side, distance = check_behind_side(front, visible, invisible, side, detections)
     
     print(f"\nTotal detections found: {len(detections) if detections else 0}")
     print("Displaying the image with detections...")
@@ -232,8 +244,14 @@ def main():
     plt.axis('off')  # Hide axes
     plt.show()
     
-    print("\n Alignment Detections:")
-    print(alignment_detections)
+    #print("\n Alignment Detections:")
+    #print(alignment_detections)
+    #print("\n Alignment Detections Side:")
+    #print(alignment_detections_side)
+
+    print("\n4. Checking truck position...")
+    is_valid = check_truck_position(detections,is_vertically_aligned,is_behind_side)
+    print(f"Truck position is valid: {is_valid}")
     
     # Print summary of detected classes
     if detections:
@@ -257,3 +275,9 @@ if __name__ == "__main__":
 #output_path = "output_image.jpg"
 #image.save(output_path)
 #vprint(f"Image saved to {output_path}")
+
+
+
+## TODO:
+# - [ ] Aquilo das listas no inicio das funcoes podia ser uma funcao so para isso
+# - 
