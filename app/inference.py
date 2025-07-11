@@ -2,10 +2,12 @@
 # import inference
 import ast
 import os
+from turtle import color
 from inference_sdk import InferenceHTTPClient
 import base64
 import cv2
 from PIL import Image, ImageDraw, ImageFont
+from matplotlib import patches
 import matplotlib.pyplot as plt
 from io import BytesIO
 from dotenv import load_dotenv
@@ -123,9 +125,10 @@ def check_vertical_alignment_front():
             deviations = [np.abs(x-mean_x) for x in x_coords] # Para cada x., vamos ver o desvio absoluto da media menos o seu valor
             max_deviation = np.max(deviations)  # Maior desvio absoluto
             
-            tolerancia = 0.05 * detections["width"]  # Tolerância em pixels para considerar que as labels estão alinhadas
-            
+            #tolerancia = 0.05 * int(detections[0]["predictions"]["width"])  # Tolerância em pixels para considerar que as labels estão alinhadas
+            tolerancia = 0.05 * 1000
             alinhado = max_deviation <= tolerancia
+            print(f"Desvio máximo: {max_deviation}, Tolerância: {tolerancia}, Alinhado: {alinhado}")
             
             return alinhado,x_coords
 
@@ -191,6 +194,126 @@ def check_vertical_alignment_front():
 # Display the image
 #image.show()
 
+def check_behind_side():
+    
+    # Verificar se a frente está atrás da side
+    side = [l for l in inference() if l["class"] == "side"]
+    front = [l for l in inference() if l["class"] == "front"]
+    visible = [l for l in inference() if l["class"] == "visible_corner"]
+    invisible = [l for l in inference() if l["class"] == "invisible_corner"]
+    
+    # Pegar no lado direito da side
+    
+    side_right_edges = [l['x'] + l['width']/2 for l in side]  # Right edge = center_x + half_width
+    max_side_right = max(side_right_edges)
+
+    front_components = front + visible + invisible
+    front_left_edges = [l['x'] - l['width']/2 for l in front_components]  # Left edge = center_x - half_width
+    min_front_left = min(front_left_edges)
+    # Distancia entre o lado direito da side e o lado esquerdo da front, para ver se a front está atrás da side
+    distance = min_front_left - max_side_right + 5000 
+    tolerancia = 0.005 * 1000  # Tolerância em pixels para considerar que a front está atrás da side
+    is_behind_side = distance >= tolerancia  
+    
+    return is_behind_side, distance 
+
+#Verificar a posição do camiao de acordo com estas funçoes que definimos
+def check_truck_position():
+    
+    alinhado_vertical, x_coords = check_vertical_alignment_front()
+    is_behind_side, distance = check_behind_side()
+    print(f"Alinhado verticalmente: {alinhado_vertical}")
+    print(f"Está atrás da side: {is_behind_side}, Distância: {distance}")
+    
+    return {
+        "alinhado_vertical": alinhado_vertical,
+        "is_behind_side": is_behind_side,
+        "distance": distance,
+        "x_coords": x_coords
+    }
+# Tenho que mudar esta função para ser mais simples de perceber e mais fácil de visualizar
+def visualizar_alinhamento():
+    """
+    Simple visualization function to show truck alignment results
+    """
+    # Load and display the image
+    img = cv2.imread(img_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.imshow(img)
+    
+    # Get detections and alignment results
+    detections = inference()
+    truck_status = check_truck_position()
+    
+    # Define colors for different classes
+    class_colors = {
+        'front': 'red',
+        'side': 'blue', 
+        'visible_corner': 'green',
+        'invisible_corner': 'orange'
+    }
+    
+    # Draw bounding boxes for each detection
+    for detection in detections:
+        x = detection["x"]
+        y = detection["y"]
+        width = detection["width"]
+        height = detection["height"]
+        class_name = detection["class"]
+        confidence = detection["confidence"]
+
+        # Calculate box corners
+        x1 = x - width / 2
+        x2 = x + width / 2
+        y1 = y - height / 2
+        y2 = y + height / 2
+        
+        # Get color for this class
+        color = class_colors.get(class_name, 'yellow')
+        
+        # Draw rectangle
+        rect = patches.Rectangle((x1, y1), x2-x1, y2-y1, 
+                               linewidth=2, edgecolor=color, facecolor='none')
+        ax.add_patch(rect)
+        
+        # Add label
+        ax.text(x1, y1-5, f'{class_name}: {confidence:.2f}', 
+               color=color, fontsize=10, 
+               bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.7))
+    
+    # Draw vertical alignment line if aligned
+    if truck_status['alinhado_vertical'] and truck_status['x_coords']:
+        mean_x = np.mean(truck_status['x_coords'])
+        ax.axvline(x=mean_x, color='red', linestyle='--', alpha=0.7, linewidth=2)
+        ax.text(mean_x + 10, 50, 'Vertical Alignment Line', color='red', fontsize=10,
+               bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.8))
+    #Isto para visualizaçao, nao interessa tanto mas dava jeito mostrar
+    # Add status text
+    vertical_status = "✓ ALIGNED" if truck_status['alinhado_vertical'] else "✗ NOT ALIGNED"
+    behind_status = "✓ BEHIND SIDE" if truck_status['is_behind_side'] else "✗ NOT BEHIND SIDE"
+    
+    status_text = f"VERTICAL: {vertical_status}\n"
+    status_text += f"POSITION: {behind_status}\n"
+    status_text += f"Distance: {truck_status['distance']:.2f}px"
+    
+    # Overall status color
+    overall_status = truck_status['alinhado_vertical'] and truck_status['is_behind_side']
+    status_color = 'green' if overall_status else 'red'
+    main_status = "TRUCK PROPERLY ALIGNED" if overall_status else "TRUCK NEEDS ADJUSTMENT"
+    
+    # Add status box
+    ax.text(10, 10, f"{main_status}\n\n{status_text}", 
+           color=status_color, fontsize=12, fontweight='bold',
+           bbox=dict(boxstyle="round,pad=0.5", facecolor='white', alpha=0.9))
+    
+    ax.set_title(f"Truck Alignment Analysis: {os.path.basename(img_path)}", fontsize=14)
+    ax.axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+
 def on_hover(event):
     if event.inaxes:
         x, y = int(event.xdata), int(event.ydata)
@@ -221,19 +344,16 @@ def main():
     print("\n1. Running inference...")
     detections = inference()
     
-    # Test the vertical alignment check
-    print("\n2. Checking vertical alignment...")
-    alignment_detections = check_vertical_alignment_front()
+    # Test the truck position analysis
+    print("\n2. Analyzing truck position...")
+    truck_status = check_truck_position()
     
+    # Show results
     print(f"\nTotal detections found: {len(detections) if detections else 0}")
-    print("Displaying the image with detections...")
-    # Display the image with detections
-    plt.imshow(image)
-    plt.axis('off')  # Hide axes
-    plt.show()
-    
-    print("\n Alignment Detections:")
-    print(alignment_detections)
+    print("\nTruck Status Analysis:")
+    print(f"  - Vertically aligned: {truck_status['alinhado_vertical']}")
+    print(f"  - Behind side panel: {truck_status['is_behind_side']}")
+    print(f"  - Distance to side: {truck_status['distance']:.2f}px")
     
     # Print summary of detected classes
     if detections:
@@ -249,7 +369,11 @@ def main():
         for class_name, count in classes_found.items():
             print(f"  - {class_name}: {count} instance(s)")
     
-    print("\nProcessing complete. Check the displayed image for visual results.")
+    # Show visualization
+    print("\n3. Displaying visualization...")
+    visualizar_alinhamento()
+    
+    print("\nProcessing complete!")
 
 if __name__ == "__main__":
     main()
