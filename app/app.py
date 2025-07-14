@@ -46,7 +46,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Add CORS middleware
+# Add CORS middleware, pq que precisamos que web browsers clients podem aceder a este API? EM que maneira é que o CORS ajuda no nosso contexto?
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

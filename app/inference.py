@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 from io import BytesIO
 from dotenv import load_dotenv
 import numpy as np
+import requests
+import json
+from datetime import datetime
 
 # Ainda estamos em fase de testagem, por agora deixa estar assim mas dps passar para um app flask para isto puder ser utilizado
 # Meter isto numa função, principalmente a parte de ir buscar o modelo
@@ -39,8 +42,9 @@ def create_model(img_path):
     )
     
     return result
-
-img_path = os.path.join("examples", "0013247.jpg")
+# Assim vai buscar o path absoluto
+script_dir = os.path.dirname(os.path.abspath(__file__))
+img_path = os.path.join(script_dir, "examples", "0013247.jpg")
 with open(img_path, "rb") as f:
     image_bytes = f.read()
 
@@ -102,10 +106,10 @@ def inference():
             # Draw rectangle
             draw.rectangle((x1, y1, x2, y2), outline="red", width=2)          
     except (IndexError, KeyError) as e:
-        print(f"Erro ao acessar as previsões {e}")
+        print(f"Erro ao aceder as previsões {e}")
     draw.polygon(pontos_maia, outline="blue", width=6)
             
-    return detections
+    return detections # Isto devolve uma lista
 # A lógica de inferencia é mais ou menos até aqui, dps disto é a definição do poligono e da linha que vai ser desenhada
 # Aqui o que se vai fazer basicamente é ver as labels todas da frente do camião, vamos ver as coorde
 
@@ -121,16 +125,16 @@ def check_vertical_alignment_front():
             print(f"Coordenadas x das labels: {x_coords}")
 
             #Temos de calcular a média e verificar se tem u grande desvio
-            mean_x = np.mean(x_coords)
+            mean_x = float(np.mean(x_coords))
             deviations = [np.abs(x-mean_x) for x in x_coords] # Para cada x., vamos ver o desvio absoluto da media menos o seu valor
-            max_deviation = np.max(deviations)  # Maior desvio absoluto
+            max_deviation = float(np.max(deviations))  # Maior desvio absoluto
             
             #tolerancia = 0.05 * int(detections[0]["predictions"]["width"])  # Tolerância em pixels para considerar que as labels estão alinhadas
             tolerancia = 0.05 * 1000
-            alinhado = max_deviation <= tolerancia
+            alinhado = bool(max_deviation <= tolerancia)
             print(f"Desvio máximo: {max_deviation}, Tolerância: {tolerancia}, Alinhado: {alinhado}")
             
-            return alinhado,x_coords
+            return alinhado,x_coords # Isto devolve um bool alinhado e valores das coordenadas x
 
 
 
@@ -194,6 +198,7 @@ def check_vertical_alignment_front():
 # Display the image
 #image.show()
 
+# Nao sei se isto faz muito sentido, prefiro mais a lógica das linhas
 def check_behind_side():
     
     # Verificar se a frente está atrás da side
@@ -212,8 +217,9 @@ def check_behind_side():
     min_front_left = min(front_left_edges)
     # Distancia entre o lado direito da side e o lado esquerdo da front, para ver se a front está atrás da side
     distance = min_front_left - max_side_right + 5000 
+    distance = float(distance)  # Convert to float for consistency
     tolerancia = 0.005 * 1000  # Tolerância em pixels para considerar que a front está atrás da side
-    is_behind_side = distance >= tolerancia  
+    is_behind_side = bool(distance >= tolerancia)  
     
     return is_behind_side, distance 
 
@@ -226,9 +232,9 @@ def check_truck_position():
     print(f"Está atrás da side: {is_behind_side}, Distância: {distance}")
     
     return {
-        "alinhado_vertical": alinhado_vertical,
-        "is_behind_side": is_behind_side,
-        "distance": distance,
+        "alinhado_vertical": bool(alinhado_vertical),
+        "is_behind_side": bool(is_behind_side),
+        "distance": float(distance),
         "x_coords": x_coords
     }
 # Tenho que mudar esta função para ser mais simples de perceber e mais fácil de visualizar
@@ -314,25 +320,25 @@ def visualizar_alinhamento():
     plt.tight_layout()
     plt.show()
 
-def on_hover(event):
-    if event.inaxes:
-        x, y = int(event.xdata), int(event.ydata)
-        plt.title(f'Coordinates: ({x}, {y})')
-        plt.draw()
+# def on_hover(event):
+#     if event.inaxes:
+#         x, y = int(event.xdata), int(event.ydata)
+#         plt.title(f'Coordinates: ({x}, {y})')
+#         plt.draw()
 
-# Convert PIL image to numpy array for matplotlib
-img_array = np.array(image)
+# # Convert PIL image to numpy array for matplotlib
+# img_array = np.array(image)
 
-# Create matplotlib figure and display image
-fig, ax = plt.subplots(figsize=(12, 8))
-ax.imshow(img_array)
-ax.set_title('Hover over image to see coordinates')
+# # Create matplotlib figure and display image
+# fig, ax = plt.subplots(figsize=(12, 8))
+# ax.imshow(img_array)
+# ax.set_title('Hover over image to see coordinates')
 
-# Connect the hover event
-fig.canvas.mpl_connect('motion_notify_event', on_hover)
+# # Connect the hover event
+# fig.canvas.mpl_connect('motion_notify_event', on_hover)
 
-# Show the plot
-plt.show()
+# # Show the plot
+# plt.show()
 
 def main():
     """
@@ -344,16 +350,26 @@ def main():
     print("\n1. Running inference...")
     detections = inference()
     
-    # Test the truck position analysis
+    # Test the truck position analysis with API notification
     print("\n2. Analyzing truck position...")
-    truck_status = check_truck_position()
+    
+    # Option 1: Just check without API notification
+    # truck_status = check_truck_position()
+    
+    # Option 2: Check and send to API (uncomment and set your webhook URL)
+    # webhook_url = "https://your-api-endpoint.com/webhook"
+    # truck_status = check_and_notify(webhook_url=webhook_url, send_notification=True)
+    
+    # Option 3: Check and send to API using environment variable
+    #truck_status = check_and_notify(send_notification=False)  # Set to True to enable API calls
     
     # Show results
     print(f"\nTotal detections found: {len(detections) if detections else 0}")
     print("\nTruck Status Analysis:")
-    print(f"  - Vertically aligned: {truck_status['alinhado_vertical']}")
-    print(f"  - Behind side panel: {truck_status['is_behind_side']}")
-    print(f"  - Distance to side: {truck_status['distance']:.2f}px")
+    #print(f"  - Vertically aligned: {truck_status['alinhado_vertical']}")
+    #print(f"  - Behind side panel: {truck_status['is_behind_side']}")
+    #print(f"  - Distance to side: {truck_status['distance']:.2f}px")
+    #print(f"  - Overall status: {truck_status.get('overall_status', 'Unknown')}")
     
     # Print summary of detected classes
     if detections:
@@ -374,10 +390,13 @@ def main():
     visualizar_alinhamento()
     
     print("\nProcessing complete!")
+    
 
 if __name__ == "__main__":
     main()
 
 #output_path = "output_image.jpg"
 #image.save(output_path)
-#vprint(f"Image saved to {output_path}")
+#vprint(f"Image saved to {output_path}")    plt.tight_layout()
+#plt.show()
+
